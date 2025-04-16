@@ -199,6 +199,59 @@ st.dataframe(column_info)
 st.subheader("Data Preview")
 st.dataframe(data.head(10))
 
+# NASA dataset sensor information
+nasa_data_source = False
+if use_main_app_data and 'data_source' in st.session_state and st.session_state.data_source == "NASA CMAPSS Data":
+    nasa_data_source = True
+elif 'data_source' in locals() and data_source == "NASA CMAPSS Data":
+    nasa_data_source = True
+
+if nasa_data_source:
+    with st.expander("NASA CMAPSS Sensor Information"):
+        st.subheader("Sensor Information")
+        
+        sensor_info = {
+            "sensor_1": "Fan inlet temperature (°F)",
+            "sensor_2": "LPC outlet temperature (°F)",
+            "sensor_3": "HPC outlet temperature (°F)",
+            "sensor_4": "LPT outlet temperature (°F)",
+            "sensor_5": "Fan inlet pressure (psi)",
+            "sensor_6": "Bypass-duct pressure (psi)",
+            "sensor_7": "HPC outlet pressure (psi)",
+            "sensor_8": "Physical fan speed (rpm)",
+            "sensor_9": "Physical core speed (rpm)",
+            "sensor_10": "Engine pressure ratio (P50/P2)",
+            "sensor_11": "HPC outlet static pressure (psi)",
+            "sensor_12": "Ratio of fuel flow to Ps30 (pps/psi)",
+            "sensor_13": "Corrected fan speed (rpm)",
+            "sensor_14": "Corrected core speed (rpm)",
+            "sensor_15": "Bypass ratio",
+            "sensor_16": "Burner fuel-air ratio",
+            "sensor_17": "Bleed enthalpy",
+            "sensor_18": "Required fan speed",
+            "sensor_19": "Required fan conversion speed",
+            "sensor_20": "HPT coolant bleed",
+            "sensor_21": "LPT coolant bleed"
+        }
+        
+        # Display sensor descriptions in a table
+        sensor_df = pd.DataFrame({
+            "Sensor": list(sensor_info.keys()),
+            "Description": list(sensor_info.values())
+        })
+        st.table(sensor_df)
+        
+        st.markdown("""
+        #### Key Abbreviations:
+        - **HPC**: High Pressure Compressor
+        - **LPC**: Low Pressure Compressor
+        - **HPT**: High Pressure Turbine
+        - **LPT**: Low Pressure Turbine
+        """)
+        
+        # Reference
+        st.caption("Reference: A. Saxena, K. Goebel, D. Simon, and N. Eklund, 'Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation', PHM08, Denver CO, Oct 2008.")
+
 # Visualization section
 st.header("Data Visualization")
 
