@@ -5,6 +5,10 @@ from sklearn.model_selection import train_test_split
 import os
 import io
 import boto3
+import requests
+import json
+import time
+from datetime import datetime
 
 def load_sample_data():
     """
@@ -76,6 +80,228 @@ def load_data_from_s3(bucket_name, file_key):
         return df
     except Exception as e:
         print(f"Error loading data from S3: {str(e)}")
+        return None
+
+def load_data_from_api(api_url, api_key=None, dataset_type='turbofan', retries=3, timeout=10):
+    """
+    Load data from a REST API endpoint
+    
+    Args:
+        api_url: URL of the API endpoint
+        api_key: Optional API key for authentication
+        dataset_type: Type of dataset to fetch ('turbofan', 'sensor', or 'custom')
+        retries: Number of retry attempts in case of connection issues
+        timeout: Request timeout in seconds
+    
+    Returns:
+        pandas DataFrame with the data or None if error
+    """
+    headers = {}
+    if api_key:
+        headers['Authorization'] = f'Bearer {api_key}'
+    
+    # Add retry logic for robust API connections
+    for attempt in range(retries):
+        try:
+            print(f"Attempting to fetch data from API (attempt {attempt+1}/{retries})...")
+            
+            # Make the API request
+            response = requests.get(api_url, headers=headers, timeout=timeout)
+            
+            # Check if request was successful
+            if response.status_code == 200:
+                # Parse the data based on dataset type
+                if dataset_type == 'turbofan':
+                    return _parse_turbofan_api_data(response.json())
+                elif dataset_type == 'sensor':
+                    return _parse_sensor_api_data(response.json())
+                else:
+                    # Try to parse as generic JSON
+                    return _parse_generic_api_data(response.json())
+            else:
+                print(f"API request failed with status code: {response.status_code}")
+                print(f"Response: {response.text}")
+                
+                # Wait before retry (exponential backoff)
+                if attempt < retries - 1:
+                    wait_time = 2 ** attempt
+                    print(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+        
+        except requests.exceptions.RequestException as e:
+            print(f"Error connecting to API: {str(e)}")
+            if attempt < retries - 1:
+                wait_time = 2 ** attempt
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+    
+    print("Failed to fetch data from API after multiple attempts.")
+    return None
+
+def _parse_turbofan_api_data(json_data):
+    """Parse data specifically formatted for turbofan engine data"""
+    try:
+        # Extract data from the JSON response
+        # This assumes a specific structure that matches our needs
+        if isinstance(json_data, dict) and 'data' in json_data:
+            # If data is in a nested 'data' field
+            data_list = json_data['data']
+        elif isinstance(json_data, list):
+            # If data is directly a list
+            data_list = json_data
+        else:
+            print("Unexpected JSON structure")
+            return None
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data_list)
+        
+        # Check if we have necessary columns
+        required_cols = ['unit_number', 'time_cycles']
+        sensor_pattern = 'sensor_'
+        
+        # If columns are named differently, try to map them
+        if not all(col in df.columns for col in required_cols):
+            # Try common alternative names
+            column_mapping = {
+                'unit': 'unit_number',
+                'unit_id': 'unit_number',
+                'engine': 'unit_number',
+                'engine_id': 'unit_number',
+                'cycle': 'time_cycles',
+                'cycles': 'time_cycles',
+                'time': 'time_cycles'
+            }
+            
+            df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
+        
+        # Check for sensor columns and rename if needed
+        sensor_cols = [col for col in df.columns if sensor_pattern in col.lower()]
+        if not sensor_cols:
+            # Try to identify sensor columns by other patterns
+            potential_sensor_cols = [col for col in df.columns if any(pattern in col.lower() for pattern in ['measurement', 'reading', 'sensor'])]
+            
+            # If we found potential sensor columns, rename them
+            if potential_sensor_cols:
+                for i, col in enumerate(potential_sensor_cols):
+                    df[f'sensor_{i+1}'] = df[col]
+        
+        # Calculate RUL if not present
+        if 'RUL' not in df.columns:
+            # Group by unit_number and calculate max cycle for each unit
+            if 'unit_number' in df.columns and 'time_cycles' in df.columns:
+                max_cycles = df.groupby('unit_number')['time_cycles'].max().reset_index()
+                max_cycles.columns = ['unit_number', 'max_cycles']
+                
+                # Merge with the main DataFrame
+                df = pd.merge(df, max_cycles, on='unit_number')
+                
+                # Calculate RUL
+                df['RUL'] = df['max_cycles'] - df['time_cycles']
+                
+                # Drop the temporary column
+                df = df.drop('max_cycles', axis=1)
+        
+        return df
+    
+    except Exception as e:
+        print(f"Error parsing turbofan API data: {str(e)}")
+        return None
+
+def _parse_sensor_api_data(json_data):
+    """Parse data from a general sensor data API"""
+    try:
+        # Handle different possible JSON structures
+        if isinstance(json_data, dict):
+            if 'data' in json_data:
+                # Case: {"data": [...]}
+                data = json_data['data']
+            elif 'readings' in json_data:
+                # Case: {"readings": [...]}
+                data = json_data['readings']
+            elif 'results' in json_data:
+                # Case: {"results": [...]}
+                data = json_data['results']
+            else:
+                # Case: JSON is directly the data structure we need
+                data = [json_data]
+        elif isinstance(json_data, list):
+            # Case: JSON is a list of records
+            data = json_data
+        else:
+            print(f"Unexpected API response format: {type(json_data)}")
+            return None
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data)
+        
+        # Check for timestamp column and convert to datetime if needed
+        time_columns = [col for col in df.columns if any(time_indicator in col.lower() 
+                                                        for time_indicator in ['time', 'date', 'timestamp'])]
+        
+        if time_columns:
+            # Use the first identified time column
+            time_col = time_columns[0]
+            try:
+                df[time_col] = pd.to_datetime(df[time_col])
+            except:
+                # If conversion fails, leave as is
+                pass
+            
+            # Sort by timestamp
+            df = df.sort_values(by=time_col).reset_index(drop=True)
+        
+        # If the data doesn't have a unit_number column, add a default one
+        if 'unit_number' not in df.columns:
+            # Check if there's an ID column that could represent units
+            id_columns = [col for col in df.columns if any(id_indicator in col.lower() 
+                                                         for id_indicator in ['id', 'unit', 'device', 'machine', 'equipment'])]
+            
+            if id_columns:
+                # Use the first identified ID column
+                df = df.rename(columns={id_columns[0]: 'unit_number'})
+            else:
+                # If no ID column found, assume all data is from one unit
+                df['unit_number'] = 1
+        
+        # If we don't have a cycles column, create one based on row index
+        if 'time_cycles' not in df.columns:
+            if time_columns:
+                # If we have a timestamp, calculate elapsed time in appropriate units
+                df['time_cycles'] = (df[time_col] - df[time_col].min()).dt.total_seconds() / 3600  # hours
+            else:
+                # Otherwise use row index as cycle
+                df['time_cycles'] = df.index + 1
+        
+        return df
+    
+    except Exception as e:
+        print(f"Error parsing sensor API data: {str(e)}")
+        return None
+
+def _parse_generic_api_data(json_data):
+    """Parse any generic JSON API data into a DataFrame"""
+    try:
+        # Handle different possible JSON structures
+        if isinstance(json_data, dict):
+            # Look for the actual data array in common JSON API formats
+            for key in ['data', 'results', 'items', 'records', 'content']:
+                if key in json_data and isinstance(json_data[key], list):
+                    return pd.DataFrame(json_data[key])
+            
+            # If no list found in common fields, convert the dict itself to a single-row DataFrame
+            return pd.DataFrame([json_data])
+            
+        elif isinstance(json_data, list):
+            # JSON is already a list, convert directly to DataFrame
+            return pd.DataFrame(json_data)
+        
+        else:
+            # Unknown format, try to convert to string and then to single-cell DataFrame
+            return pd.DataFrame([{'data': str(json_data)}])
+    
+    except Exception as e:
+        print(f"Error parsing generic API data: {str(e)}")
         return None
 
 def preprocess_data(df, test_size=0.2, random_state=42):
