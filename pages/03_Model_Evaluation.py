@@ -93,8 +93,13 @@ st.plotly_chart(error_dist_fig, use_container_width=True)
 if hasattr(model, 'feature_importances_'):
     st.subheader("Feature Importance")
     
-    # Get feature names
-    feature_names = st.session_state.feature_names
+    # Get feature names - make sure it exists and is a proper list
+    if 'feature_names' in st.session_state and st.session_state.feature_names is not None:
+        feature_names = st.session_state.feature_names
+    else:
+        # Use generic names if feature_names not in session state
+        importances = model.feature_importances_
+        feature_names = [f"Feature {i}" for i in range(len(importances))]
     
     feature_imp_fig = plot_feature_importance(model, feature_names)
     st.plotly_chart(feature_imp_fig, use_container_width=True)
@@ -157,6 +162,11 @@ st.header("Simple Model Interpretation")
 if hasattr(model, 'feature_importances_'):
     # Get top 5 features
     top_features = np.argsort(model.feature_importances_)[-5:]
+    
+    # Make sure feature_names is defined and has appropriate length
+    if 'feature_names' not in locals() or len(feature_names) != len(model.feature_importances_):
+        feature_names = [f"Feature {i}" for i in range(len(model.feature_importances_))]
+    
     top_feature_names = [feature_names[i] for i in top_features]
     top_feature_importance = model.feature_importances_[top_features]
     
