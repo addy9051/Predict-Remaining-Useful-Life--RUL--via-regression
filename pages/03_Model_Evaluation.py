@@ -108,7 +108,10 @@ if hasattr(model, 'feature_importances_'):
 st.header("Error Analysis")
 
 # Calculate absolute errors
-errors = np.abs(y_pred - y_test)
+# Convert to numpy arrays to ensure compatibility
+y_test_np = np.array(y_test)
+y_pred_np = np.array(y_pred)
+errors = np.abs(y_pred_np - y_test_np)
 
 # Find worst predictions
 n_worst = st.slider("Number of worst predictions to display", min_value=5, max_value=50, value=10)
@@ -116,9 +119,9 @@ worst_indices = np.argsort(errors)[-n_worst:][::-1]
 
 # Create DataFrame with worst predictions
 worst_df = pd.DataFrame({
-    'Actual RUL': y_test[worst_indices],
-    'Predicted RUL': y_pred[worst_indices],
-    'Absolute Error': errors[worst_indices]
+    'Actual RUL': [y_test_np[i] for i in worst_indices],
+    'Predicted RUL': [y_pred_np[i] for i in worst_indices],
+    'Absolute Error': [errors[i] for i in worst_indices]
 })
 
 st.write(f"Top {n_worst} worst predictions:")
@@ -133,7 +136,7 @@ labels = ['0-50', '51-100', '101-150', '151-200', '200+']
 
 # Group errors by RUL range
 error_by_range = pd.DataFrame({
-    'Actual RUL': y_test,
+    'Actual RUL': y_test_np,
     'Absolute Error': errors
 })
 error_by_range['RUL Range'] = pd.cut(error_by_range['Actual RUL'], bins=bins, labels=labels)
