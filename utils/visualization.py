@@ -121,6 +121,12 @@ def plot_feature_importance(model, feature_names):
     # Get feature importances
     importances = model.feature_importances_
     
+    # Make sure feature_names and importances have the same length
+    if len(feature_names) != len(importances):
+        print(f"Feature names length ({len(feature_names)}) doesn't match importances length ({len(importances)})")
+        # Use generic feature names as fallback
+        feature_names = [f"Feature {i}" for i in range(len(importances))]
+    
     # Sort by importance
     indices = np.argsort(importances)[::-1]
     sorted_feature_names = [feature_names[i] for i in indices]
@@ -131,8 +137,14 @@ def plot_feature_importance(model, feature_names):
         sorted_feature_names = sorted_feature_names[:20]
         sorted_importances = sorted_importances[:20]
     
+    # Create dataframe for plotting
+    df = pd.DataFrame({
+        'Feature': sorted_feature_names,
+        'Importance': sorted_importances
+    })
+    
     # Create figure
-    fig = px.bar(x=sorted_importances, y=sorted_feature_names, orientation='h',
+    fig = px.bar(df, x='Importance', y='Feature', orientation='h',
                 title="Feature Importance")
     
     fig.update_layout(height=max(300, len(sorted_feature_names) * 20), width=800)

@@ -168,9 +168,17 @@ else:
                 st.write(f"Test RMSE: {test_rmse:.4f}")
                 
                 # Feature importance (Top 10)
+                # Make sure feature_names and importances have the same length
+                feature_names = st.session_state.feature_names
+                importances = rf_model.feature_importances_
+                
+                if len(feature_names) != len(importances):
+                    # Use generic feature names as fallback
+                    feature_names = [f"Feature {i}" for i in range(len(importances))]
+                    
                 feature_importance = pd.DataFrame({
-                    'Feature': st.session_state.feature_names,
-                    'Importance': rf_model.feature_importances_
+                    'Feature': feature_names,
+                    'Importance': importances
                 }).sort_values('Importance', ascending=False).head(10)
                 
                 st.write("Top 10 Feature Importance:")
@@ -236,9 +244,17 @@ else:
                 st.write(f"Test RMSE: {test_rmse:.4f}")
                 
                 # Feature importance (Top 10)
+                # Make sure feature_names and importances have the same length
+                feature_names = st.session_state.feature_names
+                importances = gb_model.feature_importances_
+                
+                if len(feature_names) != len(importances):
+                    # Use generic feature names as fallback
+                    feature_names = [f"Feature {i}" for i in range(len(importances))]
+                    
                 feature_importance = pd.DataFrame({
-                    'Feature': st.session_state.feature_names,
-                    'Importance': gb_model.feature_importances_
+                    'Feature': feature_names,
+                    'Importance': importances
                 }).sort_values('Importance', ascending=False).head(10)
                 
                 st.write("Top 10 Feature Importance:")
@@ -301,9 +317,17 @@ else:
                 
                 # Feature importance (Top 10)
                 if hasattr(best_model, 'feature_importances_'):
+                    # Make sure feature_names and importances have the same length
+                    feature_names = st.session_state.feature_names
+                    importances = best_model.feature_importances_
+                    
+                    if len(feature_names) != len(importances):
+                        # Use generic feature names as fallback
+                        feature_names = [f"Feature {i}" for i in range(len(importances))]
+                        
                     feature_importance = pd.DataFrame({
-                        'Feature': st.session_state.feature_names,
-                        'Importance': best_model.feature_importances_
+                        'Feature': feature_names,
+                        'Importance': importances
                     }).sort_values('Importance', ascending=False).head(10)
                     
                     st.write("Top 10 Feature Importance:")
