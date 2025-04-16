@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from utils.data_processor import load_sample_data, load_data_from_s3
+from utils.data_processor import load_sample_data, load_data_from_s3, load_data_from_api
 from utils.aws_utils import list_s3_buckets, list_s3_objects
 from utils.visualization import plot_sensor_data, plot_rul_vs_cycles
 
@@ -13,64 +13,119 @@ st.set_page_config(page_title="Data Exploration", page_icon="📊")
 st.title("Data Exploration")
 st.markdown("Explore and analyze the machine sensor data for predictive maintenance.")
 
-# Sidebar for data source selection
-st.sidebar.header("Data Source")
-data_source = st.sidebar.radio(
-    "Select Data Source",
-    ["Sample Data", "AWS S3 Bucket"]
-)
+# Check if data is already in session state from main app
+use_main_app_data = False
+if 'data' in st.session_state and st.session_state.data is not None and 'data_source' in st.session_state:
+    use_main_app_data = st.sidebar.checkbox("Use data from main app", value=True)
 
-# Initialize session state for data
-if 'data' not in st.session_state:
-    st.session_state.data = None
-
-# Load data based on selection
-if data_source == "Sample Data":
-    # Load sample data
-    if st.session_state.data is None:
-        st.session_state.data = load_sample_data()
-    
+if use_main_app_data:
+    # Use the data that was loaded in the main app
     data = st.session_state.data
+    st.sidebar.info(f"Using {st.session_state.data_source} from main app")
     
-    if data is not None:
-        st.success("Sample data loaded successfully!")
-    else:
-        st.error("Failed to load sample data.")
-        st.stop()
-
-else:  # AWS S3 Bucket
-    # Get available S3 buckets
-    buckets = list_s3_buckets()
+    # Show which API URL the data came from if applicable
+    if st.session_state.data_source == "API" and 'api_url' in st.session_state:
+        st.sidebar.write(f"API Endpoint: {st.session_state.api_url}")
+    elif st.session_state.data_source == "AWS S3" and 'aws_bucket' in st.session_state and 'aws_file_key' in st.session_state:
+        st.sidebar.write(f"S3 Path: {st.session_state.aws_bucket}/{st.session_state.aws_file_key}")
+        
+else:
+    # Sidebar for data source selection
+    st.sidebar.header("Data Source")
+    data_source = st.sidebar.radio(
+        "Select Data Source",
+        ["Sample Data", "API", "AWS S3 Bucket"]
+    )
     
-    if buckets:
-        selected_bucket = st.sidebar.selectbox("Select S3 Bucket", buckets)
+    # Initialize session state for data
+    if 'exploration_data' not in st.session_state:
+        st.session_state.exploration_data = None
+    
+    # Load data based on selection
+    if data_source == "Sample Data":
+        # Load sample data
+        if st.session_state.exploration_data is None:
+            st.session_state.exploration_data = load_sample_data()
         
-        # List objects in selected bucket
-        objects = list_s3_objects(selected_bucket)
+        data = st.session_state.exploration_data
         
-        if objects:
-            selected_object = st.sidebar.selectbox("Select File", objects)
-            
-            # Load data button
-            if st.sidebar.button("Load Data"):
-                with st.spinner("Loading data from S3..."):
-                    data = load_data_from_s3(selected_bucket, selected_object)
-                    
-                    if data is not None:
-                        st.session_state.data = data
-                        st.success(f"Data loaded from S3: {selected_object}")
-                    else:
-                        st.error("Failed to load data from S3.")
-                        st.stop()
-            else:
-                # Use existing data or sample data
-                data = st.session_state.data if st.session_state.data is not None else load_sample_data()
+        if data is not None:
+            st.sidebar.success("Sample data loaded successfully!")
         else:
-            st.sidebar.warning("No objects found in the selected bucket.")
+            st.error("Failed to load sample data.")
+            st.stop()
+    
+    elif data_source == "API":
+        # API configuration
+        st.sidebar.subheader("API Configuration")
+        
+        # API URL input
+        api_url = st.sidebar.text_input("API Endpoint URL", placeholder="https://api.example.com/data")
+        api_key = st.sidebar.text_input("API Key (optional)", type="password", placeholder="Enter API key if required")
+        
+        # Dataset type selection
+        dataset_type = st.sidebar.selectbox(
+            "Data Format",
+            ["turbofan", "sensor", "custom"],
+            help="Select the format of data returned by the API"
+        )
+        
+        # Load data button
+        if api_url and st.sidebar.button("Fetch Data from API"):
+            with st.spinner("Fetching data from API..."):
+                data = load_data_from_api(api_url, api_key, dataset_type)
+                
+                if data is not None:
+                    st.session_state.exploration_data = data
+                    st.sidebar.success(f"Data fetched from API: {len(data)} records")
+                else:
+                    st.error("Failed to fetch data from API. Check URL and credentials.")
+                    st.stop()
+        else:
+            # Use existing data or sample data if no API data has been loaded
+            data = st.session_state.exploration_data
+            if data is None:
+                st.sidebar.warning("No API data loaded yet. Enter an API URL and fetch data, or select another data source.")
+                data = load_sample_data()
+                st.sidebar.info("Using sample data for now")
+    
+    else:  # AWS S3 Bucket
+        # Get available S3 buckets
+        buckets = list_s3_buckets()
+        
+        if buckets:
+            selected_bucket = st.sidebar.selectbox("Select S3 Bucket", buckets)
+            
+            # List objects in selected bucket
+            objects = list_s3_objects(selected_bucket)
+            
+            if objects:
+                selected_object = st.sidebar.selectbox("Select File", objects)
+                
+                # Load data button
+                if st.sidebar.button("Load Data from S3"):
+                    with st.spinner("Loading data from S3..."):
+                        data = load_data_from_s3(selected_bucket, selected_object)
+                        
+                        if data is not None:
+                            st.session_state.exploration_data = data
+                            st.sidebar.success(f"Data loaded from S3: {selected_object}")
+                        else:
+                            st.error("Failed to load data from S3.")
+                            st.stop()
+                else:
+                    # Use existing data or default to sample data
+                    data = st.session_state.exploration_data
+                    if data is None:
+                        st.sidebar.warning("No S3 data loaded yet. Select a file and load it, or select another data source.")
+                        data = load_sample_data()
+                        st.sidebar.info("Using sample data for now")
+            else:
+                st.sidebar.warning("No objects found in the selected bucket.")
+                data = load_sample_data()
+        else:
+            st.sidebar.warning("No S3 buckets available. Check your AWS credentials.")
             data = load_sample_data()
-    else:
-        st.sidebar.warning("No S3 buckets available. Check your AWS credentials.")
-        data = load_sample_data()
 
 # Display data overview
 st.header("Data Overview")

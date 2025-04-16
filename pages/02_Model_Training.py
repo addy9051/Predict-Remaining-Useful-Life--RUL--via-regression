@@ -47,17 +47,50 @@ if 'train_metrics' not in st.session_state:
     st.session_state.train_metrics = {}
 
 # Get data
-from utils.data_processor import load_sample_data, load_data_from_s3
+from utils.data_processor import load_sample_data, load_data_from_s3, load_data_from_api
 
-# Check if data exists in session state, otherwise load sample data
-if 'data' not in st.session_state or st.session_state.data is None:
-    st.session_state.data = load_sample_data()
+# Show data source info
+st.sidebar.header("Data Source")
+
+# Check if data exists in session state from main app
+if 'data' in st.session_state and st.session_state.data is not None and 'data_source' in st.session_state:
+    data_source_info = f"Using {st.session_state.data_source} from main app"
+    st.sidebar.info(data_source_info)
     
-data = st.session_state.data
+    # Show which API URL or S3 path the data came from if applicable
+    if st.session_state.data_source == "API" and 'api_url' in st.session_state:
+        st.sidebar.write(f"API Endpoint: {st.session_state.api_url}")
+    elif st.session_state.data_source == "AWS S3" and 'aws_bucket' in st.session_state and 'aws_file_key' in st.session_state:
+        st.sidebar.write(f"S3 Path: {st.session_state.aws_bucket}/{st.session_state.aws_file_key}")
+    
+    # Use the data from the main app
+    data = st.session_state.data
+else:
+    # No data in session state, load sample data
+    st.sidebar.warning("No data loaded from main app. Using sample data.")
+    data = load_sample_data()
+    st.session_state.data = data
+    st.session_state.data_source = "Sample Data"
 
 if data is None:
-    st.error("No data available. Please load data from the Data Exploration page.")
+    st.error("No data available. Please return to the main app and load data.")
     st.stop()
+
+# Show data information
+data_info = st.expander("Data Information")
+with data_info:
+    # Basic data stats
+    st.write(f"Data Shape: {data.shape[0]} rows, {data.shape[1]} columns")
+    
+    # Check for essential columns
+    required_cols = ['unit_number', 'time_cycles', 'RUL']
+    missing_cols = [col for col in required_cols if col not in data.columns]
+    if missing_cols:
+        st.warning(f"Missing essential columns: {', '.join(missing_cols)}")
+    
+    # Count sensor columns
+    sensor_cols = [col for col in data.columns if 'sensor' in col and not any(x in col for x in ['rolling', 'diff'])]
+    st.write(f"Number of sensor columns: {len(sensor_cols)}")
 
 # Show data preview
 st.subheader("Data Preview")
