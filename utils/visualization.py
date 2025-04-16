@@ -97,6 +97,29 @@ def plot_rul_vs_cycles(df, unit_id=None):
     fig = px.line(data, x='time_cycles', y='RUL', color='unit_number' if unit_id is None else None,
                  title=title)
     
+    # For NASA CMAPSS dataset, add helpful RUL threshold lines
+    # Add threshold lines to indicate maintenance windows
+    fig.add_hline(y=125, line_dash="dash", line_color="green", 
+                annotation_text="Healthy (>125 cycles)", annotation_position="right")
+    fig.add_hline(y=75, line_dash="dash", line_color="orange", 
+                annotation_text="Monitor (75-125 cycles)", annotation_position="right")
+    fig.add_hline(y=20, line_dash="dash", line_color="red", 
+                annotation_text="Critical (<20 cycles)", annotation_position="right")
+    
+    # Improve tooltip information
+    try:
+        if unit_id is None and 'unit_number' in data.columns:
+            hover_template = "Unit: %{customdata}<br>Cycle: %{x}<br>RUL: %{y} cycles"
+            for trace in fig.data:
+                trace.customdata = data['unit_number']
+                trace.hovertemplate = hover_template
+        else:
+            hover_template = "Cycle: %{x}<br>RUL: %{y} cycles"
+            for trace in fig.data:
+                trace.hovertemplate = hover_template
+    except Exception as e:
+        print(f"Error setting hover template: {str(e)}")
+    
     fig.update_layout(height=500, width=800)
     fig.update_xaxes(title_text="Cycles")
     fig.update_yaxes(title_text="Remaining Useful Life (RUL)")
