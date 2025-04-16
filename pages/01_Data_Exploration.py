@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from utils.data_processor import load_sample_data, load_data_from_s3, load_data_from_api
+from utils.data_processor import load_sample_data, load_data_from_s3, load_data_from_api, load_nasa_cmapss_data
 from utils.aws_utils import list_s3_buckets, list_s3_objects
 from utils.visualization import plot_sensor_data, plot_rul_vs_cycles
 
@@ -34,7 +34,7 @@ else:
     st.sidebar.header("Data Source")
     data_source = st.sidebar.radio(
         "Select Data Source",
-        ["Sample Data", "API", "AWS S3 Bucket"]
+        ["NASA CMAPSS Data", "Sample Data", "API", "AWS S3 Bucket"]
     )
     
     # Initialize session state for data
@@ -42,7 +42,55 @@ else:
         st.session_state.exploration_data = None
     
     # Load data based on selection
-    if data_source == "Sample Data":
+    if data_source == "NASA CMAPSS Data":
+        # NASA CMAPSS Dataset selection
+        st.sidebar.subheader("NASA CMAPSS Dataset")
+        
+        dataset_id = st.sidebar.selectbox(
+            "Select Dataset", 
+            ["FD001", "FD002", "FD003", "FD004"],
+            help="FD001: Sea Level, Single Fault Mode; FD002: Six Operating Conditions, Single Fault Mode; " +
+                 "FD003: Sea Level, Two Fault Modes; FD004: Six Operating Conditions, Two Fault Modes"
+        )
+        
+        # Load NASA data button
+        if st.sidebar.button("Load NASA Dataset"):
+            with st.spinner(f"Loading NASA CMAPSS {dataset_id} dataset..."):
+                data = load_nasa_cmapss_data(dataset=dataset_id)
+                
+                if data is not None:
+                    st.session_state.exploration_data = data
+                    st.sidebar.success(f"Successfully loaded NASA dataset ({len(data)} records)")
+                else:
+                    st.error(f"Failed to load NASA dataset {dataset_id}.")
+                    st.stop()
+        else:
+            # Use existing data or default to FD001
+            data = st.session_state.exploration_data
+            if data is None:
+                with st.spinner("Loading default NASA CMAPSS dataset (FD001)..."):
+                    data = load_nasa_cmapss_data(dataset="FD001")
+                    if data is not None:
+                        st.session_state.exploration_data = data
+                        st.sidebar.info("Loaded default NASA CMAPSS dataset (FD001)")
+                    else:
+                        st.error("Failed to load NASA dataset.")
+                        st.stop()
+        
+        # Add NASA dataset information expander
+        with st.sidebar.expander("Dataset Information"):
+            st.markdown("""
+            ### NASA CMAPSS Datasets
+            
+            - **FD001**: 100 engines, Sea Level, Single fault mode (HPC Degradation)
+            - **FD002**: 260 engines, Six operating conditions, Single fault mode 
+            - **FD003**: 100 engines, Sea Level, Two fault modes (HPC and Fan)
+            - **FD004**: 248 engines, Six operating conditions, Two fault modes
+            
+            Each contains training data (engines run to failure) and test data (engines run up to a point before failure).
+            """)
+        
+    elif data_source == "Sample Data":
         # Load sample data
         if st.session_state.exploration_data is None:
             st.session_state.exploration_data = load_sample_data()

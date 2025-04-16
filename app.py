@@ -198,15 +198,29 @@ if 'data_source' in st.session_state:
     data_source = st.session_state.data_source
     
     # Load data based on the selected source
-    if data_source == "Sample Data":
+    if data_source == "NASA CMAPSS Data":
+        if 'fetched_data' in st.session_state and st.session_state.fetched_data is not None:
+            st.session_state.data = st.session_state.fetched_data
+        else:
+            # If no data is loaded yet, try to load the selected NASA dataset
+            from utils.data_processor import load_nasa_cmapss_data
+            if 'nasa_dataset' in st.session_state:
+                st.session_state.data = load_nasa_cmapss_data(dataset=st.session_state.nasa_dataset)
+                if st.session_state.data is not None:
+                    st.success(f"Loaded NASA CMAPSS {st.session_state.nasa_dataset} dataset")
+    elif data_source == "Sample Data":
         st.session_state.data = load_sample_data()
     elif data_source == "API" and 'fetched_data' in st.session_state and st.session_state.fetched_data is not None:
         st.session_state.data = st.session_state.fetched_data
     elif data_source == "AWS S3" and 'fetched_data' in st.session_state and st.session_state.fetched_data is not None:
         st.session_state.data = st.session_state.fetched_data
-    else:
-        # Default to sample data if nothing else is available
-        st.session_state.data = load_sample_data()
+    
+    # If no data is loaded yet, default to NASA data (or sample if NASA is not available)
+    if st.session_state.data is None:
+        from utils.data_processor import load_nasa_cmapss_data
+        st.session_state.data = load_nasa_cmapss_data(dataset='FD001')
+        if st.session_state.data is None:
+            st.session_state.data = load_sample_data()
 
 # Show data preview
 st.header("Data Preview")
@@ -214,7 +228,21 @@ if st.session_state.data is not None:
     # Show data source info
     source_info = ""
     if 'data_source' in st.session_state:
-        if st.session_state.data_source == "Sample Data":
+        if st.session_state.data_source == "NASA CMAPSS Data":
+            dataset_id = st.session_state.nasa_dataset if 'nasa_dataset' in st.session_state else "FD001"
+            if dataset_id == "FD001":
+                conditions = "Sea Level, Single Fault Mode (HPC Degradation)"
+            elif dataset_id == "FD002":
+                conditions = "Six Operating Conditions, Single Fault Mode (HPC Degradation)"
+            elif dataset_id == "FD003":
+                conditions = "Sea Level, Two Fault Modes (HPC and Fan Degradation)"
+            elif dataset_id == "FD004":
+                conditions = "Six Operating Conditions, Two Fault Modes (HPC and Fan Degradation)"
+            else:
+                conditions = "Unknown configuration"
+                
+            source_info = f"Using NASA CMAPSS Dataset {dataset_id}: {conditions}"
+        elif st.session_state.data_source == "Sample Data":
             source_info = "Using sample synthetic data for demonstration"
         elif st.session_state.data_source == "API" and 'api_url' in st.session_state:
             source_info = f"Data from API: {st.session_state.api_url}"
