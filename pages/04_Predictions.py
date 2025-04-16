@@ -40,17 +40,46 @@ input_method = st.radio(
 # Function to preprocess new data
 def preprocess_new_data(new_data):
     """Preprocess new data using the stored scaler"""
-    # Make sure columns match what the model was trained on
+    # Get model columns
     model_columns = st.session_state.feature_names
     
-    # Check if all required columns are present
-    missing_cols = [col for col in model_columns if col not in new_data.columns]
+    # Engineer the same features that were used during training if they're missing
+    # For example: create rolling means, diffs, etc. if they're in model_columns
+    engineered_data = new_data.copy()
+    
+    # Generate derived features if needed
+    for col in model_columns:
+        # Handle rolling mean features
+        if '_rolling_mean' in col:
+            base_col = col.split('_rolling_mean')[0]
+            window = int(col.split('_rolling_mean')[1]) if col.split('_rolling_mean')[1] else 5
+            
+            if base_col in engineered_data.columns and col not in engineered_data.columns:
+                engineered_data[col] = engineered_data[base_col].rolling(window=window, min_periods=1).mean()
+        
+        # Handle rolling std features
+        elif '_rolling_std' in col:
+            base_col = col.split('_rolling_std')[0]
+            window = int(col.split('_rolling_std')[1]) if col.split('_rolling_std')[1] else 5
+            
+            if base_col in engineered_data.columns and col not in engineered_data.columns:
+                engineered_data[col] = engineered_data[base_col].rolling(window=window, min_periods=1).std()
+        
+        # Handle diff features
+        elif '_diff' in col:
+            base_col = col.split('_diff')[0]
+            
+            if base_col in engineered_data.columns and col not in engineered_data.columns:
+                engineered_data[col] = engineered_data[base_col].diff().fillna(0)
+    
+    # Check if any required columns are still missing
+    missing_cols = [col for col in model_columns if col not in engineered_data.columns]
     if missing_cols:
-        st.error(f"Missing required columns: {', '.join(missing_cols)}")
+        st.error(f"Missing required columns: {', '.join(missing_cols[:10])}..." if len(missing_cols) > 10 else f"Missing required columns: {', '.join(missing_cols)}")
         return None
     
     # Select only the columns used for training
-    data_for_prediction = new_data[model_columns].copy()
+    data_for_prediction = engineered_data[model_columns].copy()
     
     # Apply the same preprocessing as during training
     data_for_prediction = data_for_prediction.fillna(method='ffill')

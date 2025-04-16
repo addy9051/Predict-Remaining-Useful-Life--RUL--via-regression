@@ -124,8 +124,31 @@ def plot_feature_importance(model, feature_names):
     # Make sure feature_names and importances have the same length
     if len(feature_names) != len(importances):
         print(f"Feature names length ({len(feature_names)}) doesn't match importances length ({len(importances)})")
-        # Use generic feature names as fallback
-        feature_names = [f"Feature {i}" for i in range(len(importances))]
+        # Create more descriptive feature names based on index patterns
+        if len(importances) > len(feature_names):
+            # This might be an engineered feature set with sensor names
+            base_sensors = [name for name in feature_names if 'sensor' in name and not any(suffix in name for suffix in ['_diff', '_rolling_mean', '_rolling_std'])]
+            
+            # Try to generate meaningful names for features
+            new_names = []
+            for i in range(len(importances)):
+                if i < len(feature_names):
+                    new_names.append(feature_names[i])
+                else:
+                    # For additional features, try to infer a name based on patterns
+                    for base in base_sensors:
+                        sensor_num = base.split('_')[1] if '_' in base else ''
+                        if len(new_names) < len(importances):
+                            new_names.append(f"sensor_{sensor_num}_derived_{i}")
+            
+            # If we still don't have enough names, add generic ones
+            while len(new_names) < len(importances):
+                new_names.append(f"Feature_{len(new_names)}")
+                
+            feature_names = new_names
+        else:
+            # Default to generic feature names
+            feature_names = [f"Feature_{i}" for i in range(len(importances))]
     
     # Sort by importance
     indices = np.argsort(importances)[::-1]
