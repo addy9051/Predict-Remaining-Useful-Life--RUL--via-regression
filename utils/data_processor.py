@@ -9,20 +9,108 @@ import requests
 import json
 import time
 from datetime import datetime
+import glob
 
-def load_sample_data():
+def load_nasa_cmapss_data(dataset='FD001', data_dir='./data'):
     """
-    Load sample NASA turbofan engine degradation data or generate synthetic data
-    if the real data is not available.
+    Load the NASA CMAPSS Turbofan Engine Degradation dataset
+    
+    Args:
+        dataset: Dataset ID ('FD001', 'FD002', 'FD003', or 'FD004')
+        data_dir: Directory containing the data files
+        
+    Returns:
+        DataFrame containing the processed dataset with RUL values
     """
     try:
-        # NASA turbofan dataset structure (simplified)
-        # Create a sample dataset from FD001.txt from the Turbofan dataset
-        # This simulates loading from a file or S3 bucket
+        print(f"Loading NASA CMAPSS {dataset} dataset...")
+        
+        # Paths to data files
+        train_file = os.path.join(data_dir, f'train_{dataset}.txt')
+        test_file = os.path.join(data_dir, f'test_{dataset}.txt')
+        rul_file = os.path.join(data_dir, f'RUL_{dataset}.txt')
+        
+        # Check if files exist
+        if not (os.path.exists(train_file) and os.path.exists(test_file) and os.path.exists(rul_file)):
+            print(f"Data files for {dataset} not found in {data_dir}")
+            return None
+        
+        # Column names according to the dataset description
         columns = ['unit_number', 'time_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
                   [f'sensor_{i}' for i in range(1, 22)]
         
-        # Generate synthetic data (this would normally come from an S3 bucket)
+        # Load training data
+        train_df = pd.read_csv(train_file, delimiter=' ', header=None, names=columns)
+        train_df = train_df.loc[:, ~train_df.columns.str.contains('^Unnamed')]  # Remove unnamed columns
+        
+        # Load test data
+        test_df = pd.read_csv(test_file, delimiter=' ', header=None, names=columns)
+        test_df = test_df.loc[:, ~test_df.columns.str.contains('^Unnamed')]  # Remove unnamed columns
+        
+        # Load RUL values for test data
+        rul_values = pd.read_csv(rul_file, header=None).values.flatten()
+        
+        # Calculate RUL for training data
+        # For each unit, max cycle = failure point, so RUL = max_cycle - current_cycle
+        train_max_cycles = train_df.groupby('unit_number')['time_cycles'].max().reset_index()
+        train_max_cycles.columns = ['unit_number', 'max_cycles']
+        train_df = pd.merge(train_df, train_max_cycles, on='unit_number')
+        train_df['RUL'] = train_df['max_cycles'] - train_df['time_cycles']
+        train_df = train_df.drop('max_cycles', axis=1)
+        
+        # Calculate RUL for test data
+        # First, find the max cycle for each unit in test data
+        test_max_cycles = test_df.groupby('unit_number')['time_cycles'].max().reset_index()
+        test_max_cycles.columns = ['unit_number', 'max_cycles']
+        
+        # Add a RUL column based on the true RUL values
+        # The RUL value in the file corresponds to the last cycle of each unit
+        test_rul_df = pd.DataFrame({
+            'unit_number': range(1, len(rul_values) + 1),
+            'true_rul': rul_values
+        })
+        
+        # Merge max cycles and RUL values
+        test_max_rul = pd.merge(test_max_cycles, test_rul_df, on='unit_number')
+        
+        # Merge with test data
+        test_df = pd.merge(test_df, test_max_rul, on='unit_number')
+        
+        # Calculate RUL for each record in test data
+        # RUL at the last cycle = true_rul, so RUL at earlier cycles is higher by the difference
+        test_df['RUL'] = test_df['true_rul'] + (test_df['max_cycles'] - test_df['time_cycles'])
+        
+        # Drop helper columns
+        test_df = test_df.drop(['max_cycles', 'true_rul'], axis=1)
+        
+        # Combine train and test data
+        combined_df = pd.concat([train_df, test_df], ignore_index=True)
+        
+        print(f"Successfully loaded NASA CMAPSS {dataset} dataset. Total records: {len(combined_df)}")
+        return combined_df
+    
+    except Exception as e:
+        print(f"Error loading NASA CMAPSS data: {str(e)}")
+        return None
+
+def load_sample_data():
+    """
+    Load NASA CMAPSS turbofan engine degradation data if available,
+    otherwise generate synthetic data.
+    """
+    # First, try to load the real NASA data
+    nasa_data = load_nasa_cmapss_data(dataset='FD001')
+    if nasa_data is not None:
+        return nasa_data
+    
+    # If NASA data is not available, generate synthetic data as fallback
+    try:
+        print("Generating synthetic data as fallback...")
+        # NASA turbofan dataset structure (simplified)
+        columns = ['unit_number', 'time_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
+                  [f'sensor_{i}' for i in range(1, 22)]
+        
+        # Generate synthetic data
         np.random.seed(42)  # For reproducibility
         n_samples = 1000
         n_units = 20
@@ -56,7 +144,7 @@ def load_sample_data():
         return df
         
     except Exception as e:
-        print(f"Error loading sample data: {str(e)}")
+        print(f"Error generating sample data: {str(e)}")
         return None
 
 def load_data_from_s3(bucket_name, file_key):

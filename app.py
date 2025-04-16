@@ -26,9 +26,57 @@ Choose an option from the sidebar to explore data, train models, evaluate perfor
 # Data Source and Connection Status in sidebar
 with st.sidebar:
     st.header("Data Source")
-    data_source = st.radio("Select Data Source", ["Sample Data", "API", "AWS S3"])
+    data_source = st.radio("Select Data Source", ["NASA CMAPSS Data", "Sample Data", "API", "AWS S3"])
     
-    if data_source == "AWS S3":
+    if data_source == "NASA CMAPSS Data":
+        st.subheader("NASA CMAPSS Dataset")
+        # Initialize session state for NASA dataset settings
+        if 'nasa_dataset' not in st.session_state:
+            st.session_state.nasa_dataset = "FD001"
+            
+        # NASA dataset selection
+        st.session_state.nasa_dataset = st.selectbox(
+            "Select Dataset", 
+            ["FD001", "FD002", "FD003", "FD004"],
+            index=["FD001", "FD002", "FD003", "FD004"].index(st.session_state.nasa_dataset),
+            help="FD001: Sea Level, Single Fault Mode; FD002: Six Operating Conditions, Single Fault Mode; " +
+                 "FD003: Sea Level, Two Fault Modes; FD004: Six Operating Conditions, Two Fault Modes"
+        )
+        
+        # Load NASA data button
+        nasa_data_button = st.button("Load NASA Dataset")
+        if nasa_data_button:
+            with st.spinner(f"Loading NASA CMAPSS {st.session_state.nasa_dataset} dataset..."):
+                from utils.data_processor import load_nasa_cmapss_data
+                
+                st.session_state.fetched_data = load_nasa_cmapss_data(
+                    dataset=st.session_state.nasa_dataset
+                )
+                if st.session_state.fetched_data is not None:
+                    st.success(f"Successfully loaded NASA dataset ({len(st.session_state.fetched_data)} records)")
+                else:
+                    st.error(f"Failed to load NASA dataset {st.session_state.nasa_dataset}.")
+                    
+        # NASA data information
+        nasa_info = st.expander("Dataset Information")
+        with nasa_info:
+            st.markdown("""
+            ### NASA CMAPSS Datasets
+            
+            - **FD001**: 100 engines, Sea Level conditions, Single fault mode (HPC Degradation)
+            - **FD002**: 260 engines, Six operating conditions, Single fault mode (HPC Degradation)
+            - **FD003**: 100 engines, Sea Level conditions, Two fault modes (HPC and Fan Degradation)
+            - **FD004**: 248 engines, Six operating conditions, Two fault modes (HPC and Fan Degradation)
+            
+            Each dataset includes:
+            - Training data (engines run to failure)
+            - Test data (engines run up to a point before failure)
+            - True RUL values for test data
+            
+            Reference: A. Saxena, K. Goebel, D. Simon, and N. Eklund, "Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation", PHM08, Denver CO, Oct 2008.
+            """)
+        
+    elif data_source == "AWS S3":
         st.subheader("AWS Connection")
         aws_status = check_aws_connection()
         if aws_status:
@@ -43,8 +91,8 @@ with st.sidebar:
             st.session_state.aws_file_key = st.text_input("S3 File Key/Path", value=st.session_state.aws_file_key)
         else:
             st.error("Not connected to AWS. Please check credentials.")
-            st.info("Defaulting to sample data")
-            data_source = "Sample Data"
+            st.info("Defaulting to NASA data")
+            data_source = "NASA CMAPSS Data"
     
     elif data_source == "API":
         st.subheader("API Configuration")
