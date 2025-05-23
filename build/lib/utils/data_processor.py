@@ -37,7 +37,7 @@ def load_nasa_cmapss_data(dataset='FD001', data_dir='./data'):
         
         # Column names according to the dataset description
         columns = ['unit_number', 'time_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
-                  [f'sensor_{i}' for i in range(1, 26)]
+                  [f'sensor_{i}' for i in range(1, 22)]
         
         # Load training data
         train_df = pd.read_csv(train_file, delimiter=' ', header=None, names=columns)
@@ -407,7 +407,6 @@ def preprocess_data(df, test_size=0.2, random_state=42):
     data = df.copy()
     
     # Handle missing values
-    data  = data.dropna(axis=1)
     data = data.fillna(method='ffill')  # Forward fill
     data = data.fillna(method='bfill')  # Backward fill for any remaining NAs
     
