@@ -33,7 +33,7 @@ This project is an end-to-end machine learning pipeline and interactive dashboar
 
 ## 🏗️ Project Structure
 
-
+```
 ├── app.py # Main Streamlit app
 ├── pages/ # Streamlit multipage UI (EDA, Training, Evaluation, Monitoring)
 ├── utils/ # Data processing, feature engineering, AWS, deep learning, metrics
@@ -42,6 +42,7 @@ This project is an end-to-end machine learning pipeline and interactive dashboar
 ├── .streamlit/ # Streamlit config
 ├── pyproject.toml # Project dependencies
 ├── uv.lock # Locked dependency versions
+```
 
 
 ---
