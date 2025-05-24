@@ -60,7 +60,7 @@ This project is an end-to-end machine learning pipeline and interactive dashboar
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone <https://github.com/addy9051/Predict-Remaining-Useful-Life--RUL--via-regression.git>
    cd Predict-Remaining-Useful-Life--RUL--via-regression
    ```
 
